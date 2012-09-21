@@ -2,6 +2,7 @@
 # Code Composer
 #################
 
+.metadata/
 .config/
 src/
 
