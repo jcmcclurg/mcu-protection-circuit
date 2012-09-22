@@ -22,7 +22,9 @@
 
 void main(void)
 {
-	stop_watchdog();
+	CSL_init();                     // Activate Grace-generated configuration
+
+//	stop_watchdog();
 	/*
      * The MCU crashed and has summarily been reset.
      * This is considered catastrophic failure since
@@ -35,15 +37,15 @@ void main(void)
      * do nothing until a device reset.
      */
     // Check if WDT+ caused the prior reset condition
-    if (IFG1 & WDTIFG) {
-    	stop_watchdog();
-        // WDT+ initiated the prior reset condition
-    	on_MCU_crash(); // Handle crash
-        IFG1 &= ~WDTIFG; // Software clear WDTIFG
-    }
-    else
-    {
-    	CSL_init();                     // Activate Grace-generated configuration
+//    if (IFG1 & WDTIFG) {
+//    	stop_watchdog();
+//        // WDT+ initiated the prior reset condition
+//    	on_MCU_crash(); // Handle crash
+//        IFG1 &= ~WDTIFG; // Software clear WDTIFG
+//    }
+//    else
+//    {
+    	//green_led_on();
 
 		start_adc();
 		start_pwm();
@@ -65,7 +67,7 @@ void main(void)
 				}
 			}
 		}
-    }
+//    }
 }
 
 /*
@@ -78,21 +80,24 @@ void on_MCU_crash(void)
 	// Attempt to switch off everything again. Light up "catastrophic failure" LED.
 }
 
-// I2C: Not exactly sure how to implement this yet. Will have to read up on the SMBus protocol.
+// I2C
 void i2c_tx(void)
 {
 }
 
 void i2c_rx(void)
 {
+	char b = i2c_rx_byte();
+//	toggle_green_led();
 }
 
-void i2c_start(void)
+void i2c_start_condition(void)
 {
+	UCB0STAT &= ~(UCSTTIFG);
 }
-
-void i2c_stop(void)
+void i2c_stop_condition(void)
 {
+	UCB0STAT &= ~(UCSTPIFG);
 }
 
 // ADC: gets called when the ADC has a value ready to be read

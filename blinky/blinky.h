@@ -19,6 +19,10 @@ server_state STATE = STABLE;
 /*
  * Defines to ease the programming process.
  */
+//#define green_led_on() (P1OUT &= ~(BIT0))
+//#define green_led_off() (P1OUT |= (BIT0))
+//#define toggle_green_led() (P1OUT = P1OUT ^ BIT0)
+
 // PWM
 #define start_pwm() (TA1CTL |= MC_1) // Start timer in up mode
 #define stop_pwm() (TA1CTL &= ~(MC1 + MC0)) // Clear MCx bits to stop timer
@@ -38,7 +42,7 @@ server_state STATE = STABLE;
 // IO
 #define switch_in_server() (P1OUT |= (BIT4))
 #define switch_out_server() (P1OUT &= ~(BIT4))
-#define turn_on_scr() (P1OUT |= (BIT0))
+#define turn_on_scr() (P1OUT |= (BIT5))
 
 /*
  * Interrupt routines for use with the Grace configuration
@@ -48,10 +52,11 @@ server_state STATE = STABLE;
 void on_MCU_crash();
 
 // I2C
+#define i2c_rx_byte() UCB0RXBUF
 void i2c_tx();
 void i2c_rx();
-void i2c_start();
-void i2c_stop();
+void i2c_start_condition();
+void i2c_stop_condition();
 
 // ADC
 void adc_ready();
