@@ -8,23 +8,34 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
-#define send_uart(x) UCA0TXBUF = (x)
-#define safe_send_uart(x) while (!(IFG2 & UCA0TXIFG)); send_uart((x))
+#define NUM_SERVERS 4
 
-#define green_led_on() (P1OUT |= (BIT0))
-#define green_led_off() (P1OUT &= ~(BIT0))
+#define green_led_on() (P1OUT &= ~(BIT0))
+#define green_led_off() (P1OUT |= (BIT0))
 
-#define red_led_on() (P1OUT |= (BIT6))
-#define red_led_off() (P1OUT &= ~(BIT6))
+#define red_led_on() (P1OUT &= ~(BIT6))
+#define red_led_off() (P1OUT |= (BIT6))
 
 // USART
+#define read_byte_uart() UCA0RXBUF
+#define send_byte_uart(x) UCA0TXBUF = (x)
+void init_uart(void);
 void uart_rx(void);
 void uart_tx(void);
 
 // I2C
+#define i2c_start_tx() UCB0CTL1 |= UCTR + UCTXSTT
+#define i2c_stop() UCB0CTL1 |= UCTXSTP
+#define i2c_stop_tx() i2c_stop(); IFG2 &= ~UCB0TXIFG
+#define i2c_tx_byte(x) UCB0TXBUF = (x)
+#define i2c_set_slave(x) UCB0I2CSA = (x)
+#define I2C_SERVER1 1
+#define I2C_SERVER2 2
+#define I2C_SERVER3 3
+#define I2C_SERVER4 4
 void i2c_tx();
 void i2c_rx();
-void i2c_start();
-void i2c_stop();
+//void i2c_start();
+//void i2c_stop();
 
 #endif /* MAIN_H_ */
