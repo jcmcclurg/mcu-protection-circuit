@@ -45,11 +45,12 @@ void main(void)
 //    }
 //    else
 //    {
-    	//green_led_on();
+    	red_led_on();
+        top_led_off();
+        bottom_led_off();
 
+        switch_in_server();
 		start_adc();
-		start_pwm();
-		set_pwm_duty_cycle(0);
 
 		while (1) {
 			if (STATE == OFFLOADING) {
@@ -65,6 +66,8 @@ void main(void)
 					int i;
 					for (i = 0; i < 500; i++) {}
 				}
+				top_led_on();
+				bottom_led_on();
 			}
 		}
 //    }
@@ -75,10 +78,10 @@ void main(void)
  */
 
 // Watchdog Timer: gets called when the MCU
-void on_MCU_crash(void)
-{
-	// Attempt to switch off everything again. Light up "catastrophic failure" LED.
-}
+//void on_MCU_crash(void)
+//{
+//	// Attempt to switch off everything again. Light up "catastrophic failure" LED.
+//}
 
 // I2C
 void i2c_tx(void)
@@ -88,35 +91,33 @@ void i2c_tx(void)
 void i2c_rx(void)
 {
 	char b = i2c_rx_byte();
-//	toggle_green_led();
+	toggle_red_led();
 }
 
 void i2c_start_condition(void)
 {
+	// Clear start condition flag
 	UCB0STAT &= ~(UCSTTIFG);
 }
 void i2c_stop_condition(void)
 {
+	// Clear stop condition flag
 	UCB0STAT &= ~(UCSTPIFG);
 }
 
 // ADC: gets called when the ADC has a value ready to be read
 void adc_ready(void)
 {
+	toggle_top_led();
 	if(read_adc() > MAX_VOLTAGE && STATE == STABLE) {
+		bottom_led_on();
+		switch_out_server();
+		stop_adc();
+
+		// Begin slow-shorting the terminals
+		set_pwm_duty_cycle(0);
+		start_pwm();
+
 		STATE = OFFLOADING;
 	}
-}
-
-void overvoltage_condition(void)
-{
-	switch_out_server();
-	slow_short_input_terminals();
-	turn_on_scr();
-}
-
-void slow_short_input_terminals(void)
-{
-	start_pwm();
-	stop_pwm();
 }
