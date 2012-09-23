@@ -20,6 +20,10 @@
 #include "blinky.h"
 #define MAX_VOLTAGE (1024*5/16)
 
+int pastVoltages[NUM_VOLTAGES];
+int* pastVoltagePointer = pastVoltages;
+int voltageSum = -1;
+
 void main(void)
 {
 	CSL_init();                     // Activate Grace-generated configuration
@@ -109,7 +113,44 @@ void i2c_stop_condition(void)
 void adc_ready(void)
 {
 	toggle_top_led();
-	if(read_adc() > MAX_VOLTAGE && STATE == STABLE) {
+
+	// Calculate initial sum, keeping it negative to indicate that it is not complete
+	if(voltageSum <= -1)
+	{
+		*pastVoltagePointer = read_adc();
+		if(pastVoltagePointer >= pastVoltages+NUM_VOLTAGES-1)
+		{
+			// Remove the initial -1.
+			voltageSum++;
+
+			// Flip the sign.
+			voltageSum *= -1;
+		}
+		else
+		{
+			voltageSum -= *pastVoltagePointer;
+			pastVoltagePointer++;
+		}
+	}
+
+	// Adjust initial sum to implement moving average. This way, computation time of the moving
+	// average is not dependent upon the size of average.
+	else
+	{
+		pastVoltagePointer++;
+		if(pastVoltagePointer >= pastVoltages+NUM_VOLTAGES)
+		{
+			pastVoltagePointer = pastVoltages;
+		}
+		// Remove the overwritten voltage from the sum
+		voltageSum -= *pastVoltagePointer;
+
+		// Add the new voltage to the sum
+		*pastVoltagePointer = read_adc();
+		voltageSum += *pastVoltagePointer;
+	}
+
+	if(voltageSum > MAX_VOLTAGE*NUM_VOLTAGES && STATE == STABLE) {
 		bottom_led_on();
 		switch_out_server();
 		stop_adc();

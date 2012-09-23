@@ -16,6 +16,8 @@ typedef enum server_state_enum {
 
 server_state STATE = STABLE;
 
+#define NUM_VOLTAGES 10
+
 /*
  * Defines to ease the programming process.
  */
@@ -71,13 +73,5 @@ void i2c_stop_condition();
 
 // ADC
 void adc_ready();
-
-/*
- * Our functions
- */
-
-// High-level
-void overvoltage_condition(void);
-void slow_short_input_terminals(void);
 
 #endif /* LED_H_ */
