@@ -10,29 +10,35 @@
 
 
 #include "main.h"
+#include "uart.h"
+
+// I2C stuff
+#define I2C_RX   (1<<2)
+#define I2C_TX   (1<<3)
+#define I2C_TXRX (1<<4)
+char flags = 0;
+char* i2cSendPointer = "";
+unsigned char i2cReceiveCount = 0;
+char* i2cReceivePointer = "";
+unsigned char i2cResponseLength = 0;
+
+
+// Uart stuff
+char uart_byte_before_last = 0;
+char uart_last_byte = 0;
+char uart_flags;
+
+
+// Own stuff
+#define COMMAND_STATUS (1)
+#define COMMAND_VOLTS  (1<<1)
+char command_flags = 0;
+char current_server = 0;
 
 const unsigned char serverAddresses[NUM_SERVERS] = {I2C_SERVER1, I2C_SERVER2, I2C_SERVER3, I2C_SERVER4};
-
-/* The send_uart(char* stringToSend) configuration works as follows:
- * 1. Initialize sendPointer to point to beginning of null-terminated string
- * 2. Send first byte
- * 3. When TX is ready again, increment pointer and send next byte if it is not null.
- *
- * Be careful when using this inside interrupt service routines. You should not expect more than the first
- * byte to get sent until the ISR you are currently in exits.
- *
- * Also, it's a generally a bad idea to make multiple sequential calls to send_uart, since the call is
- * non-blocking and will overwrite whatever is already in the buffer.
- */
-//#define send_uart(x) uartSendPointer = (x);
-
-// The send_i2c(char* stringToSend, char address) configuration works the same way as send_uart
-char* i2cSendPointer = "";
-#define send_i2c(x, a) i2cSendPointer = (x); i2c_set_slave(a); i2c_start_tx()
-
-//char receiveBuffer[9];
-//char* receivePointer = sendBuffer;
-#define read_uart(x) receiveBuffer
+server_state server_states[NUM_SERVERS];
+int server_voltages[NUM_SERVERS];
+char server_response_buffer[SERVER_RESPONSE_BUFFER_SIZE];
 
 
 /*
@@ -41,68 +47,178 @@ char* i2cSendPointer = "";
 void main(int argc, char *argv[])
 {
     CSL_init();                     // Activate Grace-generated configuration
-    init_uart();
+//    init_uart();
 
     top_led_off();
     bottom_led_off();
     red_led_off();
-    red_led_on();
-    toggle_red_led();
 
-    while(1);
+    // Tell the uart library which flags buffer and last byte buffer to populate
+    init_uart(&uart_last_byte, &uart_flags);
+    send_uart("\r\nMaster MCU\r\n");
+
+    while(1)
+    {
+    	if(uart_flags & UART_RX)
+    	{
+    		uart_flags &= ~UART_RX;
+    		send_uart("UART_RX{");
+    		send_byte_uart(uart_last_byte);
+
+    		if(uart_last_byte >= '1' && uart_last_byte <= '4')
+    		{
+    			current_server = uart_last_byte - '1';
+				if(uart_byte_before_last == 's')
+				{
+					command_flags |= COMMAND_STATUS;
+					i2c_communicate("s", serverAddresses[current_server], server_response_buffer, sizeof(server_state));
+				}
+				else if(uart_byte_before_last == 'v')
+				{
+					command_flags |= COMMAND_VOLTS;
+					i2c_communicate("v", serverAddresses[current_server], server_response_buffer, sizeof(int));
+				}
+    		}
+    		send_uart("}\r\n");
+
+    		uart_byte_before_last = uart_last_byte;
+    	}
+
+    	if(flags & I2C_TX)
+		{
+			flags &= ~I2C_TX;
+			send_uart("I2C_TX\r\n");
+		}
+
+    	if(flags & I2C_RX)
+    	{
+    		flags &= ~I2C_RX;
+    		send_uart("I2C_RX\r\n");
+    	}
+
+    	if(flags & I2C_TXRX)
+    	{
+    		flags &= ~I2C_TXRX;
+    		send_uart("I2C_TXRX{");
+    		int i;
+    		for(i = 0; i < SERVER_RESPONSE_BUFFER_SIZE; i++)
+    		{
+    			send_byte_uart(server_response_buffer[i]);
+    		}
+			send_uart("}\r\n");
+
+			if(command_flags & COMMAND_STATUS)
+			{
+				command_flags &= ~COMMAND_STATUS;
+				memcpy(&(server_states[current_server]),server_response_buffer,sizeof(server_state));
+
+				send_uart("Server ");
+				send_byte_uart(current_server + '1');
+				if(server_states[current_server] == STABLE)
+				{
+					send_uart(" STABLE\r\n");
+				}
+				else if(server_states[current_server] == OFFLOADING)
+				{
+					send_uart(" OFFLOADING\r\n");
+				}
+				else// if(server_states[current_server] == OFF)
+				{
+					send_uart(" OFF\r\n");
+				}
+			}
+
+			if(command_flags & COMMAND_VOLTS)
+			{
+				command_flags &= ~COMMAND_VOLTS;
+				memcpy(&(server_voltages[NUM_SERVERS]),server_response_buffer,sizeof(int));
+
+				send_uart("Server ");
+				send_byte_uart(current_server + '1');
+				send_uart(" voltage read.\r\n");
+			}
+    	}
+    }
 }
 
-// USART
-void send_uart(char* str)
+// I2C
+void i2c_send_data(char* str, unsigned char addr)
 {
-	bottom_led_on();
-	while(*str != 0)
-	{
-		while(!(IFG2 & UCA0TXIFG));
+	i2c_communicate(str,addr,0,0);
+}
 
-		send_byte_uart(*str);
-		str++;
+// This function works as follows:
+// 1. Wait for previous messages (if any) to finish by checking whether i2cSendPointer points to null character.
+// 2. Load the i2cSendPointer with string
+// 3. Use tx_ready interrupt to shift out the bytes of string until you reach a null character. At this point, stop.
+void i2c_communicate(char* str, unsigned char addr, char* response, unsigned char responseLength)
+{
+	if(*str != 0)
+	{
+		// Allow previous message to finish.
+		while(!(*i2cSendPointer == 0));
+
+		i2cReceivePointer = response;
+		i2cResponseLength = responseLength;
+		i2cReceiveCount = 0;
+
+		i2cSendPointer = str;
+		i2c_set_slave(addr);
+		i2c_start_tx();
 	}
-	bottom_led_off();
-}
-void init_uart(void)
-{
-	//receiveBuffer[0] = 0;
 }
 
-// TODO: Implement circular buffer for storing command before it is parsed
-void uart_rx(void)
+void i2c_tx()
 {
+	IFG2 &= ~UCB0TXIFG; // Not really necessary since I think that sending a byte to the TX buffer already clears the interrupt.
+	flags |= I2C_TX;
+
 	top_led_on();
-	//*receivePointer = read_byte_uart();
-	char c = read_byte_uart();
-	if(c == 'j')
+
+	if(*i2cSendPointer != 0)
 	{
-		send_i2c("HITHERE", I2C_SERVER1);
+		i2c_tx_byte(*i2cSendPointer);
+		i2cSendPointer++;
 	}
 	else
 	{
-	   send_uart("No serial commands have been implemented.\r\n");
+		// IFG2 &= ~UCB0TXIFG; // Make sure you un-comment this if you comment out the top interrupt clearing statement
+		if(i2cResponseLength == 0)
+		{
+			i2c_stop();
+		}
+		else
+		{
+			i2c_start_rx();
+		}
 	}
 	top_led_off();
 }
 
-// I2C
-void i2c_tx()
-{
-	if(*i2cSendPointer != 0)
-	{
-		i2cSendPointer++;
-		toggle_red_led();
-		i2c_tx_byte(*i2cSendPointer);
-	}
-	else
-	{
-		i2c_stop_tx();
-	}
-}
-
 void i2c_rx()
 {
+	IFG2 &= ~UCB0RXIFG;  // Not really necessary because I'm pretty sure reading the RX buffer clears the interrupt automatically.
+	flags |= I2C_RX;
+	bottom_led_on();
+
+	// Issue the stop command on the last byte
+	if(i2cReceiveCount < i2cResponseLength-1)
+	{
+		*i2cReceivePointer = i2c_rx_byte();
+		i2cReceivePointer++;
+		if(i2cReceiveCount == i2cResponseLength-2)
+		{
+			i2c_stop();
+		}
+
+		// Clear interrupt flag.
+		//IFG2 &= ~UCB0RXIFG;  // Make sure you un-comment this if you comment out the top interrupt clearing statement
+	}
+	else if(i2cReceiveCount == i2cResponseLength-1)
+	{
+		flags |= I2C_TXRX;
+		*i2cReceivePointer = i2c_rx_byte();
+	}
+	i2cReceiveCount++;
 	bottom_led_off();
 }
