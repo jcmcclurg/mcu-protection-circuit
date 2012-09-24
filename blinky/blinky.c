@@ -1,3 +1,4 @@
+
 //*****************************************************************************
 //  Blink LED Example
 //
@@ -18,12 +19,24 @@
  *  ======== main ========
  */
 #include "blinky.h"
+#include "uart.h"
 #define MAX_VOLTAGE (1024*5/16)
 
+#define I2C_RX   (1<<2)
+#define I2C_TX   (1<<3)
+
+char i2c_flags = 0;
+char uart_flags = 0;
+char uart_last_byte = 0;
 int pastVoltages[NUM_VOLTAGES];
 int* pastVoltagePointer = pastVoltages;
 int voltageSum = -1;
 
+char current_command = '?';
+char response_buffer[RESPONSE_BUFFER_SIZE];
+char txCount = 0;
+
+// TODO: Use Timer1 to define an exact ramp-rate for the PWM in ms.
 void main(void)
 {
 	CSL_init();                     // Activate Grace-generated configuration
@@ -49,9 +62,13 @@ void main(void)
 //    }
 //    else
 //    {
-    	red_led_on();
+    	red_led_off();
         top_led_off();
         bottom_led_off();
+
+        // Tell the uart library which flags buffer and last byte buffer to populate
+		init_uart(&uart_last_byte, &uart_flags);
+		send_uart("\r\nSlave node 1\r\n");
 
         switch_in_server();
 		start_adc();
@@ -73,6 +90,21 @@ void main(void)
 				top_led_on();
 				bottom_led_on();
 			}
+			// Debugging purposes only. Doesn't work too well since the i2c rx and tx happens faster than the while loop.
+			/*else if(i2c_flags & I2C_TX)
+			{
+				i2c_flags &= ~I2C_TX;
+				send_uart("I2C_TX{");
+				send_byte_uart(current_command);
+				send_uart("}\r\n");
+			}
+			else if(i2c_flags & I2C_RX)
+			{
+				i2c_flags &= ~I2C_RX;
+				send_uart("I2C_RX{");
+				send_byte_uart(current_command);
+				send_uart("}\r\n");
+			}*/
 		}
 //    }
 }
@@ -90,12 +122,50 @@ void main(void)
 // I2C
 void i2c_tx(void)
 {
+	IFG2 &= ~UCB0TXIFG; // Probably not necessary since I think writing to the TX buffer clears the flag.
+	i2c_flags |= I2C_TX;
+
+	if(current_command == 's' || current_command == 'v')
+	{
+		if(txCount <= RESPONSE_BUFFER_SIZE-1)
+		{
+			i2c_tx_byte(response_buffer[txCount]);
+			txCount++;
+		}
+
+		// If the server asks for too much data, send it some zeros.
+		else
+		{
+			red_led_on();
+			i2c_tx_byte(0);
+		}
+	}
+
+	// This shouldn't ever happen. It's when the server gets an invalid i2c command, which asks for data.
+	else
+	{
+		red_led_on();
+		i2c_tx_byte('?');
+	}
 }
 
 void i2c_rx(void)
 {
-	char b = i2c_rx_byte();
-	toggle_red_led();
+	IFG2 &= ~UCB0RXIFG; // Probably not necessary since I think reading from RX buffer clears the flag.
+	i2c_flags |= I2C_RX;
+	current_command = i2c_rx_byte();
+
+	if(current_command == 's')
+	{
+		txCount = 0;
+		memcpy(response_buffer,&STATE,sizeof(server_state));
+	}
+	else if(current_command == 'v')
+	{
+		int j = read_adc();
+		txCount = 0;
+		memcpy(response_buffer,&j,sizeof(int));
+	}
 }
 
 void i2c_start_condition(void)

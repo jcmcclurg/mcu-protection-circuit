@@ -7,7 +7,7 @@
 <deviceEndianness value="little"/>
 <codegenToolVersion value="4.1.2"/>
 <isElfFormat value="true"/>
-<connection value="common/targetdb/connections/TIMSP430-USB.xml"/>
+<connection value="common/targetdb/connections/TIMSP430-USB2.xml"/>
 <linkerCommandFile value="lnk_msp430g2553.cmd"/>
 <rts value="libc.a"/>
 <templateProperties value="id=com.ti.sdo.grace.example_1,type=rtsc,products=com.ti.sdo.grace,platform=ti.platforms.msp430:$DeviceId$,buildProfile=debug,isHybrid=true,configuroOptions=--compileOptions &quot;--symdebug:dwarf --optimize_with_debug&quot;,"/>

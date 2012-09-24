@@ -17,6 +17,7 @@ typedef enum server_state_enum {
 server_state STATE = STABLE;
 
 #define NUM_VOLTAGES 10
+#define RESPONSE_BUFFER_SIZE 2
 
 /*
  * Defines to ease the programming process.
@@ -65,7 +66,8 @@ server_state STATE = STABLE;
 //void on_MCU_crash();
 
 // I2C
-#define i2c_rx_byte() UCB0RXBUF
+#define i2c_rx_byte() (UCB0RXBUF)
+#define i2c_tx_byte(x) (UCB0TXBUF = (x))
 void i2c_tx();
 void i2c_rx();
 void i2c_start_condition();
