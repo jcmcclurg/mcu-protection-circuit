@@ -25,7 +25,6 @@ char command_flags = 0;
 char current_server = 0;
 server_state server_states[NUM_SERVERS];
 
-
 /*
  *  ======== main ========
  */
