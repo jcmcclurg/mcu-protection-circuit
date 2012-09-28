@@ -1,0 +1,9 @@
+To checkout these projects for the first time into Code Composer Studio 5, please follow the following steps:
+
+1. Checkout using GIT to directory x
+2. Set Code Composer Studio workspace to directory x
+3. Create two new CCS projects named exactly "master_mcu" and "slave_mcu"
+4. Delete main.c and main.cfg if necessary.
+5. Right-click on each project, select Team->share
+6. Choose Git, then select the local repository as where you will share to
+7. Enjoy using Git with CCS5!
