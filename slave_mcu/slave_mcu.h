@@ -22,56 +22,49 @@ server_state STATE = STABLE;
 /*
  * Defines to ease the programming process.
  */
-#define red_led_off()    (P1OUT &= ~BIT0)
-#define red_led_on()     (P1OUT |=  BIT0)
-#define toggle_red_led() (P1OUT ^=  BIT0)
 
-#define top_led_on()     (P2OUT &= ~BIT0)
-#define top_led_off()    (P2OUT |=  BIT0)
-#define toggle_top_led() (P2OUT ^=  BIT0)
+// Red LED on Pin 1.0
+#define led_off()    (P1OUT &= ~BIT0)
+#define led_on()     (P1OUT |=  BIT0)
+#define toggle_led() (P1OUT ^=  BIT0)
 
-#define bottom_led_on()     (P2OUT &= ~BIT1)
-#define bottom_led_off()    (P2OUT |=  BIT1)
-#define toggle_bottom_led() (P2OUT ^=  BIT1)
+#define MAX_VOLTAGE 291 // This is set to correspond to 15 volts.
+                        // The microcontroller sees this as 15/16 volts.
+                        // Because the Vcc of the microcontroller is 3.3 volts
+                        // due to the step-down resistor divider. This gets
+                        // stored in the register as 1024*(15/16)/3.3
+
 
 // Notice that the PWM and ADC use the same timer
 
 // PWM
-#define start_pwm() (TA0CCTL1 = CM_0 + CCIS_0 + OUTMOD_7) // Tie the timer PWM output to a pin
+//#define start_pwm() (TA0CCTL1 = CM_0 + CCIS_0 + OUTMOD_7) // Tie the timer PWM output to a pin
 //#define pwm_output_off() (TA0CCTL1 = 0)
+#define PWM_START_DUTY 375
+#define PWM_END_DUTY   425
+#define PWM_MAX_DUTY   500
+#define TIMER_TICKS_PER_PWM_INCREMENT (5*40) // This number is set so that TIMER_TICKS_PER_PWM_INCREMENT*(50 increments)/(2kHz) = 5 second
 #define read_pwm_duty_cycle() (TA0CCR1)
 #define set_pwm_duty_cycle(r) (TA0CCR1 = (r))
 #define stop_pwm() (TA0CTL &= ~(MC1 + MC0)) // Clear MCx bits to stop timer
 
-// WATCHDOG
-//#define start_watchdog() (WDTCTL = WDTPW)         // Clear hold (and all other) bits
-//#define stop_watchdog() (WDTCTL = WDTPW + WDTHOLD) // Set hold bit and clear others
-//#define feed_watchdog() (WDTCTL = WDTCTL + WDTCNTCL)  // Set WDT+ counter clear bit (instruction clears other bits)
-
 // ADC
-#define start_adc() (TA0CTL |= MC_1) // Start timer in up mode
+//#define start_adc() (TA0CTL |= MC_1) // Start timer in up mode
 #define stop_adc() (ADC10CTL0 &= ~ENC) // Disable ADC
 #define read_adc() (ADC10MEM) // Read ADC conversion result from ADC10MEM
 
 // IO
-#define switch_in_server() (P2OUT |= (BIT5))
-#define switch_out_server() (P2OUT &= ~(BIT5))
-#define turn_on_scr() (P2OUT |= (BIT4))
+#define switch_in_server() (P2OUT |= BIT3)
+#define switch_out_server() (P2OUT &= ~BIT3)
+#define turn_on_scr() (P2OUT |= BIT4)
+#define scr_pin_low() (P2OUT &= ~BIT4)
+
+#define alarm_high() (P2OUT |= BIT2)
+#define alarm_low() (P2OUT &= ~BIT2)
 
 /*
  * Interrupt routines for use with the Grace configuration
  */
-
-// Watchdog Timer
-//void on_MCU_crash();
-
-// I2C
-#define i2c_rx_byte() (UCB0RXBUF)
-#define i2c_tx_byte(x) (UCB0TXBUF = (x))
-void i2c_tx();
-void i2c_rx();
-void i2c_start_condition();
-void i2c_stop_condition();
 
 // ADC
 void adc_ready();

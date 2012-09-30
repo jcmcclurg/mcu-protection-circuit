@@ -39,9 +39,7 @@ void send_uart(char* str)
 
 void uart_rx(void)
 {
-	IFG2 &= ~UCA0RXIFG; // Not really necessary because I'm pretty sure reading the RX buffer clears the interrupt automatically.
+	IFG2 &= ~UCA0RXIFG;
 	*_uart_flags |= UART_RX;
-
-	//toggle_red_led();
 	*_current_command = read_byte_uart();
 }

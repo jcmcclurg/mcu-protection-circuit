@@ -9,7 +9,7 @@
  * ======== Standard MSP430 includes ========
  */
 #include <msp430.h>
-
+#include <stdio.h>
 /*
  * ======== Grace related includes ========
  */
@@ -18,56 +18,91 @@
 /*
  *  ======== main ========
  */
-#include "blinky.h"
+#include "slave_mcu.h"
 #include "uart.h"
-#define MAX_VOLTAGE (1024*5/16)
+#include "itoa.h"
 
 char uart_flags = 0;
 char uart_last_byte = 0;
+char pwm_ticker = 0;
 int pastVoltages[NUM_VOLTAGES];
 int* pastVoltagePointer = pastVoltages;
 int voltageSum = -1;
+char str_buffer[32];
 
-// TODO: Use Timer1 to define an exact ramp-rate for the PWM in ms.
 void main(void)
 {
 	CSL_init();                     // Activate Grace-generated configuration
-    	red_led_off();
-        top_led_off();
-        bottom_led_off();
 
-        // Tell the uart library which flags buffer and last byte buffer to populate
+	// Initial state
+	switch_in_server();
+	led_on();
+
+	// Tell the uart library which flags buffer and last byte buffer to populate
 	init_uart(&uart_last_byte, &uart_flags);
-	send_uart("\r\nSlave node 1\r\n");
+	send_uart("\r\nSlave node 4 UART test.\r\nDO NOT CONNECT TO PC WHILE MAIN VOLTAGE IS ON!!!\r\n");
 
-        switch_in_server();
-	start_adc();
+	while (1)
+	{
+		if(uart_flags & UART_RX)
+		{
+			uart_flags &= ~UART_RX;
 
-	while (1) {
-		if (STATE == OFFLOADING) {
-			set_pwm_duty_cycle(read_pwm_duty_cycle() + 1);
-
-			// Faster than modulus (and avoids slowness warning)
-			if (read_pwm_duty_cycle() == 100) {
-				STATE = OFF;
+			if(uart_last_byte == 'p')
+			{
 				stop_pwm();
-
-				turn_on_scr();
-			} else {
-				int i;
-				for (i = 0; i < 500; i++) {}
+				send_uart("\r\nPWM Stopped\r\n");
 			}
-			top_led_on();
-			bottom_led_on();
+			else if(uart_last_byte == '+')
+			{
+				set_pwm_duty_cycle(read_pwm_duty_cycle() + 1);
+				send_uart("\r\nPWM Increased\r\n");
+				itoa(read_pwm_duty_cycle(),str_buffer,10);
+				send_uart(str_buffer);
+				send_uart("\r\n");
+			}
+			else if(uart_last_byte == '-')
+			{
+				set_pwm_duty_cycle(read_pwm_duty_cycle() - 1);
+				send_uart("\r\nPWM Decreased\r\n");
+				itoa(read_pwm_duty_cycle(),str_buffer,10);
+				send_uart(str_buffer);
+				send_uart("\r\n");
+			}
+			else
+			{
+				send_byte_uart(uart_last_byte);
+			}
 		}
 	}
+}
+
+void timer0_tick(void)
+{
+   if(STATE == OFFLOADING)
+   {
+	   if(pwm_ticker >= TIMER_TICKS_PER_PWM_INCREMENT)
+	   {
+		   toggle_led();
+		   set_pwm_duty_cycle(read_pwm_duty_cycle() + 1);
+
+		   if (read_pwm_duty_cycle() >= PWM_END_DUTY)
+		   {
+			   set_pwm_duty_cycle(PWM_MAX_DUTY);
+			   STATE = OFF;
+			   led_off();
+			   stop_pwm();
+			   turn_on_scr();
+		   }
+		   pwm_ticker = 0;
+	   }
+	   pwm_ticker++;
+   }
 }
 
 // ADC: gets called when the ADC has a value ready to be read
 void adc_ready(void)
 {
-	toggle_top_led();
-
 	// Calculate initial sum, keeping it negative to indicate that it is not complete
 	if(voltageSum <= -1)
 	{
@@ -105,14 +140,12 @@ void adc_ready(void)
 	}
 
 	if(voltageSum > MAX_VOLTAGE*NUM_VOLTAGES && STATE == STABLE) {
-		bottom_led_on();
-		switch_out_server();
-		stop_adc();
-
 		// Begin slow-shorting the terminals
-		set_pwm_duty_cycle(0);
-		start_pwm();
-
 		STATE = OFFLOADING;
+
+		switch_out_server();
+		alarm_high();
+		stop_adc();
+		set_pwm_duty_cycle(PWM_START_DUTY);
 	}
 }
