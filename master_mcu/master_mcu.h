@@ -15,17 +15,24 @@ typedef enum server_state_enum {
 } server_state;
 
 #define NUM_SERVERS 4
+#define ALARMPORT P2IN
+#define SERVER1_PIN BIT0
+#define SERVER2_PIN BIT1
+#define SERVER3_PIN BIT2
+#define SERVER4_PIN BIT3
+
+#define SERVER1_ALARM 1
+#define SERVER2_ALARM (1<<1)
+#define SERVER3_ALARM (1<<2)
+#define SERVER4_ALARM (1<<3)
 
 #define red_led_off()    (P1OUT &= ~BIT0)
 #define red_led_on()     (P1OUT |=  BIT0)
 #define toggle_red_led() (P1OUT ^=  BIT0)
 
-#define top_led_on()     (P2OUT &= ~BIT0)
-#define top_led_off()    (P2OUT |=  BIT0)
-#define toggle_top_led() (P2OUT ^=  BIT0)
+#define green_led_off()    (P1OUT &= ~BIT6)
+#define gree_led_on()      (P1OUT |=  BIT6)
+#define toggle_green_led() (P1OUT ^=  BIT6)
 
-#define bottom_led_on()     (P2OUT &= ~BIT1)
-#define bottom_led_off()    (P2OUT |=  BIT1)
-#define toggle_bottom_led() (P2OUT ^=  BIT1)
 
 #endif /* MAIN_H_ */

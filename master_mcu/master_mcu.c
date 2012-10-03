@@ -9,11 +9,10 @@
 #include <ti/mcu/msp430/csl/CSL.h>
 
 
-#include "main.h"
+#include "master_mcu.h"
 #include "uart.h"
 
 // Uart stuff
-char uart_byte_before_last = 0;
 char uart_last_byte = 0;
 char uart_flags;
 
@@ -23,6 +22,7 @@ char uart_flags;
 #define COMMAND_VOLTS  (1<<1)
 char command_flags = 0;
 char current_server = 0;
+char alarm_flags    = 0;
 server_state server_states[NUM_SERVERS];
 
 /*
@@ -31,10 +31,13 @@ server_state server_states[NUM_SERVERS];
 void main(int argc, char *argv[])
 {
     CSL_init();                     // Activate Grace-generated configuration
-//    init_uart();
 
-    top_led_off();
-    bottom_led_off();
+    int i;
+    for(i=0;i<NUM_SERVERS;i++)
+    {
+    	server_states[i] = STABLE;
+    }
+    green_led_off();
     red_led_off();
 
     // Tell the uart library which flags buffer and last byte buffer to populate
@@ -46,26 +49,45 @@ void main(int argc, char *argv[])
     	if(uart_flags & UART_RX)
     	{
     		uart_flags &= ~UART_RX;
-    		send_uart("UART_RX{");
     		send_byte_uart(uart_last_byte);
-
-    		if(uart_last_byte >= '1' && uart_last_byte <= '4')
-    		{
-    			current_server = uart_last_byte - '1';
-				if(uart_byte_before_last == 's')
-				{
-					command_flags |= COMMAND_STATUS;
-					i2c_communicate("s", serverAddresses[current_server], server_response_buffer, sizeof(server_state));
-				}
-				else if(uart_byte_before_last == 'v')
-				{
-					command_flags |= COMMAND_VOLTS;
-					i2c_communicate("v", serverAddresses[current_server], server_response_buffer, sizeof(int));
-				}
-    		}
-    		send_uart("}\r\n");
-
-    		uart_byte_before_last = uart_last_byte;
     	}
     }
+}
+
+void alarm_received(void)
+{
+
+
+	red_led_on();
+	if(ALARMPORT & SERVER1_PIN && !(alarm_flags & SERVER1_ALARM))
+	{
+		P1IFG &= ~SERVER1_PIN;
+
+		alarm_flags |= SERVER1_ALARM;
+		send_uart("Server 1 alarm!\r\n");
+	}
+
+	if(ALARMPORT & SERVER2_PIN && !(alarm_flags & SERVER2_ALARM))
+	{
+		P1IFG &= ~SERVER2_PIN;
+
+		alarm_flags |= SERVER2_ALARM;
+		send_uart("Server 2 alarm!\r\n");
+	}
+
+	if(ALARMPORT & SERVER3_PIN && !(alarm_flags & SERVER3_ALARM))
+	{
+		P1IFG &= ~SERVER3_PIN;
+
+		alarm_flags |= SERVER3_ALARM;
+		send_uart("Server 3 alarm!\r\n");
+	}
+
+	if(ALARMPORT & SERVER4_PIN && !(alarm_flags & SERVER4_ALARM))
+	{
+		P1IFG &= ~SERVER4_PIN;
+
+		alarm_flags |= SERVER4_ALARM;
+		send_uart("Server 4 alarm!\r\n");
+	}
 }
