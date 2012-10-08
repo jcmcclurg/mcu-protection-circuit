@@ -34,16 +34,21 @@ server_state STATE = STABLE;
                         // due to the step-down resistor divider. This gets
                         // stored in the register as 1024*(15/16)/3.3
 
+//#define PROPORTION 8192
+#define INITIAL_VOLTAGE_SETPOINT 246 // 1024*(12.7/16)/3.3
+//#define VOLT_ERROR_THRESH_START 5
+//#define VERROR_THRESH 2
+//#define VOLT_ERROR_THRESH_INC 5
+//#define VOLTAGE_LEEWAY 23
 
 // Notice that the PWM and ADC use the same timer
 
 // PWM
 //#define start_pwm() (TA0CCTL1 = CM_0 + CCIS_0 + OUTMOD_7) // Tie the timer PWM output to a pin
 //#define pwm_output_off() (TA0CCTL1 = 0)
-#define PWM_START_DUTY 375
-#define PWM_END_DUTY   425
-#define PWM_MAX_DUTY   500
-#define TIMER_TICKS_PER_PWM_INCREMENT (5*40) // This number is set so that TIMER_TICKS_PER_PWM_INCREMENT*(50 increments)/(2kHz) = 5 second
+#define PWM_START_DUTY 700 // This duty ratio determined experimentally
+#define PWM_MAX_DUTY   1000
+#define TIMER_TICKS_PER_VOLTAGE_INCREMENT 41 // (10 seconds) * (1 kilohertz) / INITIAL_VOLTAGE_SETPOINT
 #define read_pwm_duty_cycle() (TA0CCR1)
 #define set_pwm_duty_cycle(r) (TA0CCR1 = (r))
 #define stop_pwm() (TA0CTL &= ~(MC1 + MC0)) // Clear MCx bits to stop timer

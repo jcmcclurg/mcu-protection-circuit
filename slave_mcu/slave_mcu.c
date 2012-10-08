@@ -24,10 +24,14 @@
 
 char uart_flags = 0;
 char uart_last_byte = 0;
-char pwm_ticker = 0;
+char voltage_ticker = 0;
+
+int voltageSum = 0;
 int pastVoltages[NUM_VOLTAGES];
 int* pastVoltagePointer = pastVoltages;
-int voltageSum = -1;
+
+//int voltage_error_thresh = VOLT_ERROR_THRESH_START;
+int voltage_setpoint = INITIAL_VOLTAGE_SETPOINT;
 char str_buffer[32];
 
 void main(void)
@@ -38,9 +42,15 @@ void main(void)
 	switch_in_server();
 	led_on();
 
+	int i;
+	for(i=0;i<NUM_VOLTAGES;i++)
+	{
+		pastVoltages[i] = 0;
+	}
+
 	// Tell the uart library which flags buffer and last byte buffer to populate
 	init_uart(&uart_last_byte, &uart_flags);
-	send_uart("\r\nSlave node 4 UART test.\r\nDO NOT CONNECT TO PC WHILE MAIN VOLTAGE IS ON!!!\r\n");
+	send_uart("\r\nSlave node x UART test.\r\nDO NOT CONNECT TO PC WHILE MAIN VOLTAGE IS ON!!!\r\n");
 
 	while (1)
 	{
@@ -48,10 +58,15 @@ void main(void)
 		{
 			uart_flags &= ~UART_RX;
 
-			if(uart_last_byte == 'p')
+			if(uart_last_byte == 'v')
 			{
-				stop_pwm();
-				send_uart("\r\nPWM Stopped\r\n");
+				send_uart("Voltage = ");
+				itoa(voltageSum,str_buffer,10);
+				send_uart(str_buffer);
+				send_uart(". Set voltage = ");
+				itoa(voltage_setpoint*NUM_VOLTAGES,str_buffer,10);
+				send_uart(str_buffer);
+				send_uart("\r\n");
 			}
 			else if(uart_last_byte == '+')
 			{
@@ -69,6 +84,20 @@ void main(void)
 				send_uart(str_buffer);
 				send_uart("\r\n");
 			}
+			else if(uart_last_byte == '>')
+			{
+				voltage_setpoint++;
+				itoa(voltage_setpoint,str_buffer,10);
+				send_uart(str_buffer);
+				send_uart("\r\n");
+			}
+			else if(uart_last_byte == '<')
+			{
+				voltage_setpoint--;
+				itoa(voltage_setpoint,str_buffer,10);
+				send_uart(str_buffer);
+				send_uart("\r\n");
+			}
 			else
 			{
 				send_byte_uart(uart_last_byte);
@@ -81,71 +110,97 @@ void timer0_tick(void)
 {
    if(STATE == OFFLOADING)
    {
-	   if(pwm_ticker >= TIMER_TICKS_PER_PWM_INCREMENT)
+	   if(voltage_ticker >= TIMER_TICKS_PER_VOLTAGE_INCREMENT)
 	   {
-		   toggle_led();
-		   set_pwm_duty_cycle(read_pwm_duty_cycle() + 1);
-
-		   if (read_pwm_duty_cycle() >= PWM_END_DUTY)
+		   if(voltage_setpoint == 0)
 		   {
-			   set_pwm_duty_cycle(PWM_MAX_DUTY);
-			   STATE = OFF;
-			   led_off();
-			   stop_pwm();
 			   turn_on_scr();
+			   STATE = OFF;
+			   stop_adc();
+			   led_off();
+			   // TODO: Stop timer.
 		   }
-		   pwm_ticker = 0;
+		   else
+		   {
+			   toggle_led();
+			   //voltage_error_thresh = VOLT_ERROR_THRESH_START;
+			   voltage_setpoint--;
+			   voltage_ticker = 0;
+		   }
 	   }
-	   pwm_ticker++;
+
+/*	   if(voltage_ticker & 0xF == 0)
+	   {
+		   voltage_error_thresh += VOLT_ERROR_THRESH_INC;
+	   }*/
+	   voltage_ticker++;
    }
 }
 
 // ADC: gets called when the ADC has a value ready to be read
 void adc_ready(void)
 {
-	// Calculate initial sum, keeping it negative to indicate that it is not complete
-	if(voltageSum <= -1)
+	pastVoltagePointer++;
+	if(pastVoltagePointer >= pastVoltages+NUM_VOLTAGES)
 	{
-		*pastVoltagePointer = read_adc();
-		if(pastVoltagePointer >= pastVoltages+NUM_VOLTAGES-1)
-		{
-			// Remove the initial -1.
-			voltageSum++;
+		pastVoltagePointer = pastVoltages;
+	}
+	// Remove the overwritten voltage from the sum
+	voltageSum -= *pastVoltagePointer;
 
-			// Flip the sign.
-			voltageSum *= -1;
-		}
-		else
+
+	if(STATE == STABLE )
+	{
+		// Add the new voltage to the sum
+		*pastVoltagePointer = (int) read_adc();
+		voltageSum += *pastVoltagePointer;
+
+		if(voltageSum > NUM_VOLTAGES*MAX_VOLTAGE)
 		{
-			voltageSum -= *pastVoltagePointer;
-			pastVoltagePointer++;
+			switch_out_server();
+			alarm_high();
+
+			// Begin slow-shorting the terminals
+			voltageSum = 0;
+			int i;
+			for(i=0;i<NUM_VOLTAGES;i++)
+			{
+				pastVoltages[i] = 0;
+			}
+
+			STATE = OFFLOADING;
+
+			set_pwm_duty_cycle(PWM_START_DUTY);
 		}
 	}
 
-	// Adjust initial sum to implement moving average. This way, computation time of the moving
-	// average is not dependent upon the size of average.
-	else
+	else if(STATE == OFFLOADING)
 	{
-		pastVoltagePointer++;
-		if(pastVoltagePointer >= pastVoltages+NUM_VOLTAGES)
-		{
-			pastVoltagePointer = pastVoltages;
-		}
-		// Remove the overwritten voltage from the sum
-		voltageSum -= *pastVoltagePointer;
+		int delta = *pastVoltagePointer;
 
 		// Add the new voltage to the sum
-		*pastVoltagePointer = read_adc();
+		*pastVoltagePointer = (((int)read_adc()) - voltage_setpoint);
 		voltageSum += *pastVoltagePointer;
-	}
 
-	if(voltageSum > MAX_VOLTAGE*NUM_VOLTAGES && STATE == STABLE) {
-		// Begin slow-shorting the terminals
-		STATE = OFFLOADING;
+		// Get the average derivative
+		delta = *pastVoltagePointer - delta;
 
-		switch_out_server();
-		alarm_high();
-		stop_adc();
-		set_pwm_duty_cycle(PWM_START_DUTY);
+		if(voltageSum < -NUM_VOLTAGES/2 && read_pwm_duty_cycle() > 0 && delta <= 0)
+		{
+			//if(((int)read_pwm_duty_cycle()) - (voltageSum/PROPORTION + 1) >= 0)
+			//set_pwm_duty_cycle(((int)read_pwm_duty_cycle()) - (voltageSum/PROPORTION + 1));
+			if(read_pwm_duty_cycle() > 0)
+				set_pwm_duty_cycle(read_pwm_duty_cycle() - 1);
+			//else
+				//set_pwm_duty_cycle(0);
+		}
+
+		else if(voltageSum > NUM_VOLTAGES/2 && read_pwm_duty_cycle() < PWM_MAX_DUTY && delta >= 0)
+		{
+			if(read_pwm_duty_cycle() < PWM_MAX_DUTY)
+				set_pwm_duty_cycle(read_pwm_duty_cycle() + 1);
+			//else
+				//set_pwm_duty_cycle(PWM_MAX_DUTY);
+		}
 	}
 }
