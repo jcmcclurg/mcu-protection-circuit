@@ -31,8 +31,11 @@ typedef enum server_state_enum {
 #define toggle_red_led() (P1OUT ^=  BIT0)
 
 #define green_led_off()    (P1OUT &= ~BIT6)
-#define gree_led_on()      (P1OUT |=  BIT6)
+#define green_led_on()      (P1OUT |= BIT6)
 #define toggle_green_led() (P1OUT ^=  BIT6)
 
+#define power_supply_off() (P2OUT |= BIT4)
+
+void update_voltage(void);
 
 #endif /* MAIN_H_ */

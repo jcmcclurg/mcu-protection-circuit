@@ -11,6 +11,7 @@
 
 #include "master_mcu.h"
 #include "uart.h"
+#include "itoa.h"
 
 // Uart stuff
 char uart_last_byte = 0;
@@ -23,6 +24,8 @@ char uart_flags;
 char command_flags = 0;
 char current_server = 0;
 char alarm_flags    = 0;
+char alarm_count = 0;
+char str_buffer[32];
 server_state server_states[NUM_SERVERS];
 
 /*
@@ -42,52 +45,59 @@ void main(int argc, char *argv[])
 
     // Tell the uart library which flags buffer and last byte buffer to populate
     init_uart(&uart_last_byte, &uart_flags);
-    send_uart("\r\nMaster MCU\r\n");
-
-    while(1)
-    {
-    	if(uart_flags & UART_RX)
-    	{
-    		uart_flags &= ~UART_RX;
-    		send_byte_uart(uart_last_byte);
-    	}
-    }
+    green_led_on();
+    while(1);
 }
 
 void alarm_received(void)
 {
-
-
-	red_led_on();
 	if(ALARMPORT & SERVER1_PIN && !(alarm_flags & SERVER1_ALARM))
 	{
 		P1IFG &= ~SERVER1_PIN;
-
 		alarm_flags |= SERVER1_ALARM;
-		send_uart("Server 1 alarm!\r\n");
+		update_voltage();
 	}
 
 	if(ALARMPORT & SERVER2_PIN && !(alarm_flags & SERVER2_ALARM))
 	{
 		P1IFG &= ~SERVER2_PIN;
-
 		alarm_flags |= SERVER2_ALARM;
-		send_uart("Server 2 alarm!\r\n");
+		update_voltage();
 	}
 
 	if(ALARMPORT & SERVER3_PIN && !(alarm_flags & SERVER3_ALARM))
 	{
 		P1IFG &= ~SERVER3_PIN;
-
 		alarm_flags |= SERVER3_ALARM;
-		send_uart("Server 3 alarm!\r\n");
+		update_voltage();
 	}
 
 	if(ALARMPORT & SERVER4_PIN && !(alarm_flags & SERVER4_ALARM))
 	{
 		P1IFG &= ~SERVER4_PIN;
-
 		alarm_flags |= SERVER4_ALARM;
-		send_uart("Server 4 alarm!\r\n");
+		update_voltage();
+	}
+}
+
+void update_voltage(void)
+{
+	if(alarm_count < 2)
+	{
+		green_led_off();
+		red_led_on();
+		alarm_count++;
+		int voltage = 48 - (12*alarm_count);
+
+		itoa(voltage,str_buffer,10);
+		send_uart(str_buffer);
+		send_uart("\r\n");
+	}
+	else
+	{
+		green_led_on();
+		red_led_on();
+		send_uart("STACK FAIL\r\n");
+		power_supply_off();
 	}
 }
